@@ -43,12 +43,12 @@ die()   { printf '\033[31m  x %s\033[0m\n' "$*"; exit 1; }
 step()  { printf '\n\033[1;36m== %s ==\033[0m\n' "$*"; }
 
 ask_yn() { # ask_yn "question" default(y|n)
-  local q="$1" def="${2:-n}" ans hint="[y/N]"
-  [ "$def" = y ] && hint="[Y/n]"
+  local q="$1" def="${2:-n}" ans hint="[s/N]"
+  [ "$def" = y ] && hint="[S/n]"
   printf '  %s %s ' "$q" "$hint"
   read -r ans <&7 || ans=""
   [ -z "$ans" ] && ans="$def"
-  case "$ans" in [Yy]*) return 0 ;; *) return 1 ;; esac
+  case "$ans" in [SsYy]*) return 0 ;; *) return 1 ;; esac
 }
 
 tv() { "$ADB" -s "$TARGET" shell "$@" 2>&1 | tr -d '\r'; }
@@ -69,13 +69,13 @@ change() { # change "what" "command on tv" "undo command on tv"
     log "FAIL  $what"
     log "      do:   $cmd"
     log "      out:  $out"
-    warn "failed: $what ($out)"
+    warn "falhou: $what ($out)"
   else
     log "OK    $what"
     log "      do:   $cmd"
     log "      undo: $undo"
     [ -n "$out" ] && log "      out:  $out"
-    info "done: $what"
+    info "feito: $what"
   fi
 }
 
@@ -108,34 +108,34 @@ find_windows_adb() {
 }
 
 setup_adb() {
-  step "1. Setup"
+  step "1. Preparação"
   detect_os
-  info "Computer: $OS"
+  info "Computador: $OS"
   if command -v adb >/dev/null 2>&1; then
-    info "adb is installed: $(adb version | head -1)"
+    info "adb já está instalado: $(adb version | head -1)"
     return
   fi
-  [ "$OS" = windows ] && find_windows_adb && { info "adb found: $ADB"; return; }
+  [ "$OS" = windows ] && find_windows_adb && { info "adb encontrado: $ADB"; return; }
 
-  warn "adb is not installed."
+  warn "adb não está instalado."
   case "$OS" in
     mac)
-      command -v brew >/dev/null 2>&1 || die "Homebrew is missing. Install it from https://brew.sh, then run this script again."
-      info "Installing with Homebrew..."
-      brew install --cask android-platform-tools || die "Homebrew install failed." ;;
+      command -v brew >/dev/null 2>&1 || die "Homebrew não encontrado. Instale em https://brew.sh e rode este script de novo."
+      info "Instalando com Homebrew..."
+      brew install --cask android-platform-tools || die "A instalação com Homebrew falhou." ;;
     linux)
-      command -v apt-get >/dev/null 2>&1 || die "apt is not available. Install adb with your package manager, then run this script again."
-      info "Installing with apt (it may ask for your password)..."
-      sudo apt-get update && sudo apt-get install -y adb || die "apt install failed." ;;
+      command -v apt-get >/dev/null 2>&1 || die "apt não disponível. Instale o adb pelo gerenciador de pacotes e rode este script de novo."
+      info "Instalando com apt (pode pedir sua senha)..."
+      sudo apt-get update && sudo apt-get install -y adb || die "A instalação com apt falhou." ;;
     windows)
-      info "Installing with winget..."
+      info "Instalando com winget..."
       winget install --id Google.PlatformTools -e --accept-source-agreements --accept-package-agreements \
-        || die "winget install failed."
-      find_windows_adb || die "adb installed but not found yet. Close and reopen Git Bash, then run this script again." ;;
-    *) die "Unknown system. Install Android platform-tools yourself, then run this script again." ;;
+        || die "A instalação com winget falhou."
+      find_windows_adb || die "adb instalado, mas ainda não encontrado. Feche e abra o Git Bash de novo e rode este script outra vez." ;;
+    *) die "Sistema desconhecido. Instale o Android platform-tools e rode este script de novo." ;;
   esac
-  command -v adb >/dev/null 2>&1 || [ "$ADB" != adb ] || die "adb still not found on PATH."
-  info "adb installed."
+  command -v adb >/dev/null 2>&1 || [ "$ADB" != adb ] || die "adb ainda não foi encontrado."
+  info "adb instalado."
 }
 
 # ---------------------------------------------------------------- 2. find TV
@@ -157,10 +157,10 @@ local_ip() {
 }
 
 discover() {
-  step "2. Finding your TV"
+  step "2. Procurando sua TV"
   : > "$TMP/found"
 
-  info "Looking with mDNS..."
+  info "Procurando via mDNS..."
   "$ADB" mdns services 2>/dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]+' >> "$TMP/mdns" || true
   if command -v avahi-browse >/dev/null 2>&1; then
     # _androidtvremote2 is advertised by Android/Google TVs; _adb by adb itself.
@@ -175,7 +175,7 @@ discover() {
   local me; me="$(local_ip)"
   if [ -n "$me" ]; then
     local net="${me%.*}"
-    info "Scanning $net.1-254 for port $PORT (this computer is $me)..."
+    info "Varrendo $net.1-254 na porta $PORT (este computador é $me)..."
     : > "$TMP/scan"
     local i
     for i in $(seq 1 254); do
@@ -185,7 +185,7 @@ discover() {
     kill $(jobs -p) 2>/dev/null; wait 2>/dev/null
     cat "$TMP/scan" >> "$TMP/found"
   else
-    warn "Could not work out this computer's IP address; skipping the port scan."
+    warn "Não foi possível descobrir o IP deste computador; pulando a varredura."
   fi
 
   # Keep only hosts that really answer on port 5555.
@@ -199,46 +199,46 @@ discover() {
 
   local n; n="$(grep -c . "$TMP/cands")"
   if [ "$n" -eq 0 ]; then
-    warn "No TV found automatically."
-    printf '  Type the TV IP address (Settings > Network on the TV): '
+    warn "Nenhuma TV encontrada automaticamente."
+    printf '  Digite o IP da TV (na TV: Configurações > Rede): '
     read -r ip <&7
-    [ -z "$ip" ] && die "No IP given."
+    [ -z "$ip" ] && die "Nenhum IP informado."
     echo "$ip" > "$TMP/cands"; n=1
   fi
 
   if [ "$n" -eq 1 ]; then
     TARGET="$(head -1 "$TMP/cands")"
   else
-    bold "  Found $n devices:"
+    bold "  Encontrei $n aparelhos:"
     local k=0 line name
     while read -r line; do
       k=$((k+1))
       name="$(grep "^${line%%:*}|" "$TMP/names" 2>/dev/null | head -1 | cut -d'|' -f2)"
       printf '    %d) %s %s\n' "$k" "$line" "${name:+($name)}"
     done < "$TMP/cands"
-    printf '  Which one is your TV? [1-%d]: ' "$n"
+    printf '  Qual deles é a sua TV? [1-%d]: ' "$n"
     read -r k <&7
     TARGET="$(sed -n "${k}p" "$TMP/cands")"
-    [ -z "$TARGET" ] && die "Invalid choice."
+    [ -z "$TARGET" ] && die "Opção inválida."
   fi
   case "$TARGET" in *:*) ;; *) TARGET="$TARGET:$PORT" ;; esac
 }
 
 connect_tv() {
-  bold "  Connecting to $TARGET"
+  bold "  Conectando em $TARGET"
   "$ADB" connect "$TARGET" >/dev/null 2>&1
-  bold "  >>> Look at your TV now and press \"Allow\" (tick \"Always allow\" to skip this next time). <<<"
+  bold "  >>> Olhe para a TV agora e aperte \"Permitir\" (marque \"Sempre permitir\" para não perguntar de novo). <<<"
   local t=0 st
   while [ $t -lt 90 ]; do
     st="$("$ADB" -s "$TARGET" get-state 2>&1 | tr -d '\r')"
     case "$st" in
-      device) info "Connected: $(tv getprop ro.product.manufacturer) $(tv getprop ro.product.model), Android $(tv getprop ro.build.version.release)"; return ;;
+      device) info "Conectado: $(tv getprop ro.product.manufacturer) $(tv getprop ro.product.model), Android $(tv getprop ro.build.version.release)"; return ;;
       *unauthorized*) ;;
       *) "$ADB" connect "$TARGET" >/dev/null 2>&1 ;;
     esac
     sleep 2; t=$((t+2))
   done
-  die "The TV did not authorize within 90 seconds. Check that USB debugging is on, then run again."
+  die "A TV não autorizou em 90 segundos. Confira se a depuração USB está ligada e rode de novo."
 }
 
 # ---------------------------------------------------------------- 3. audit
@@ -259,50 +259,50 @@ classify() {
   CAT=""; DESC=""
   case "$p" in
     # ---- needed to boot or use the TV
-    android) CAT=REQ; DESC="Android core system" ;;
-    com.android.systemui) CAT=REQ; DESC="System UI (notifications, overlays)" ;;
+    android) CAT=REQ; DESC="Sistema principal do Android" ;;
+    com.android.systemui) CAT=REQ; DESC="Interface do sistema (notificações, janelas)" ;;
     com.android.vending) CAT=REQ; DESC="Google Play Store" ;;
-    com.google.android.gms) CAT=REQ; DESC="Google Play Services (sign-in, updates, most apps need it)" ;;
-    com.google.android.gsf*) CAT=REQ; DESC="Google Services Framework (account and sync plumbing)" ;;
+    com.google.android.gms) CAT=REQ; DESC="Google Play Services (login, atualizações; a maioria dos apps precisa)" ;;
+    com.google.android.gsf*) CAT=REQ; DESC="Google Services Framework (conta e sincronização)" ;;
     com.google.android.tvlauncher|com.google.android.leanbacklauncher|com.google.android.apps.tv.launcherx)
-      CAT=REQ; DESC="Stock home screen (launcher)" ;;
+      CAT=REQ; DESC="Tela inicial original (launcher)" ;;
     com.google.android.leanback.ime|com.google.android.inputmethod.latin)
-      CAT=REQ; DESC="On-screen keyboard" ;;
-    com.android.tv.settings|com.google.android.tv.settings) CAT=REQ; DESC="TV Settings app" ;;
-    com.android.settings*) CAT=REQ; DESC="Android settings components" ;;
-    com.android.providers.*|com.google.android.providers.*) CAT=REQ; DESC="Data provider (storage for settings, media, downloads...)" ;;
-    com.google.android.tv.remote.service) CAT=REQ; DESC="Remote control and phone-remote pairing" ;;
-    com.google.android.tungsten.setupwraith) CAT=REQ; DESC="Setup wizard (runs after resets and updates)" ;;
-    com.android.packageinstaller|com.google.android.packageinstaller) CAT=REQ; DESC="Installs and updates apps" ;;
-    com.android.bluetooth*|com.google.android.bluetooth*) CAT=REQ; DESC="Bluetooth (remotes, headphones)" ;;
-    com.android.shell) CAT=REQ; DESC="adb shell (this tool needs it)" ;;
-    com.android.inputdevices) CAT=REQ; DESC="Keyboard and remote layouts" ;;
-    com.android.externalstorage|com.android.documentsui|com.google.android.documentsui) CAT=REQ; DESC="USB and file storage access" ;;
-    com.google.android.tv) CAT=REQ; DESC="Live Channels (TV tuner / inputs app)" ;;
-    com.android.tv|com.mediatek.wwtv.tvcenter|com.sony.dtv.tvplayer|com.tcl.tv) CAT=REQ; DESC="TV tuner / inputs app" ;;
+      CAT=REQ; DESC="Teclado na tela" ;;
+    com.android.tv.settings|com.google.android.tv.settings) CAT=REQ; DESC="Configurações da TV" ;;
+    com.android.settings*) CAT=REQ; DESC="Partes das configurações do Android" ;;
+    com.android.providers.*|com.google.android.providers.*) CAT=REQ; DESC="Armazenamento de dados (configurações, mídia, downloads...)" ;;
+    com.google.android.tv.remote.service) CAT=REQ; DESC="Controle remoto e pareamento com o celular" ;;
+    com.google.android.tungsten.setupwraith) CAT=REQ; DESC="Assistente de configuração (roda após reset e atualizações)" ;;
+    com.android.packageinstaller|com.google.android.packageinstaller) CAT=REQ; DESC="Instala e atualiza apps" ;;
+    com.android.bluetooth*|com.google.android.bluetooth*) CAT=REQ; DESC="Bluetooth (controles, fones)" ;;
+    com.android.shell) CAT=REQ; DESC="adb shell (este programa precisa dele)" ;;
+    com.android.inputdevices) CAT=REQ; DESC="Layouts de teclado e controle" ;;
+    com.android.externalstorage|com.android.documentsui|com.google.android.documentsui) CAT=REQ; DESC="Acesso a USB e arquivos" ;;
+    com.google.android.tv) CAT=REQ; DESC="Canais ao vivo (sintonizador / entradas)" ;;
+    com.android.tv|com.mediatek.wwtv.tvcenter|com.sony.dtv.tvplayer|com.tcl.tv) CAT=REQ; DESC="Sintonizador de TV / entradas" ;;
     com.google.android.partnersetup|com.google.android.configupdater|com.google.android.backuptransport|com.google.android.syncadapters.*)
-      CAT=REQ; DESC="Google system service" ;;
+      CAT=REQ; DESC="Serviço de sistema do Google" ;;
 
     # ---- yes/no questions later
-    com.google.android.katniss) CAT=OPT; DESC="Voice search / Assistant on the remote (also powers the search box)" ;;
-    com.google.android.googlequicksearchbox) CAT=OPT; DESC="Google app / Assistant" ;;
-    com.google.android.apps.mediashell) CAT=OPT; DESC="Chromecast built-in (cast from your phone)" ;;
+    com.google.android.katniss) CAT=OPT; DESC="Busca por voz / Assistente no controle (também faz a busca funcionar)" ;;
+    com.google.android.googlequicksearchbox) CAT=OPT; DESC="App Google / Assistente" ;;
+    com.google.android.apps.mediashell) CAT=OPT; DESC="Chromecast integrado (transmitir do celular)" ;;
     com.android.dreams.basic|com.android.dreams.phototable|com.google.android.backdrop|com.google.android.apps.tv.dreamx)
-      CAT=OPT; DESC="Screensaver / Ambient mode" ;;
+      CAT=OPT; DESC="Protetor de tela / Modo ambiente" ;;
 
     # ---- bloat and ad/recommendation services
-    com.google.android.tvrecommendations) CAT=SAFE; DESC="Recommendation feed (ads and 'what to watch' rows)" ;;
-    com.google.android.leanbacklauncher.recommendations) CAT=SAFE; DESC="Home screen recommendation rows" ;;
-    com.google.android.feedback) CAT=SAFE; DESC="Sends feedback reports to Google" ;;
-    com.google.android.tv.bugreportsender) CAT=SAFE; DESC="Sends bug reports" ;;
-    com.google.android.marvin.talkback) CAT=SAFE; DESC="TalkBack screen reader (keep if you use it)" ;;
-    com.google.android.tts) CAT=SAFE; DESC="Text-to-speech voice (needed only for TalkBack)" ;;
-    com.android.printspooler) CAT=SAFE; DESC="Printing (unused on a TV)" ;;
+    com.google.android.tvrecommendations) CAT=SAFE; DESC="Recomendações (anúncios e fileiras de 'o que assistir')" ;;
+    com.google.android.leanbacklauncher.recommendations) CAT=SAFE; DESC="Fileiras de recomendação da tela inicial" ;;
+    com.google.android.feedback) CAT=SAFE; DESC="Envia relatórios de feedback ao Google" ;;
+    com.google.android.tv.bugreportsender) CAT=SAFE; DESC="Envia relatórios de erro" ;;
+    com.google.android.marvin.talkback) CAT=SAFE; DESC="Leitor de tela TalkBack (mantenha se usar)" ;;
+    com.google.android.tts) CAT=SAFE; DESC="Voz de leitura de texto (só para o TalkBack)" ;;
+    com.android.printspooler) CAT=SAFE; DESC="Impressão (não usada na TV)" ;;
     com.android.gallery3d|com.android.music|com.android.camera2|com.android.calendar|com.android.contacts)
-      CAT=SAFE; DESC="Phone-style stock app (rarely used on a TV)" ;;
-    com.android.egg) CAT=SAFE; DESC="Android version easter egg" ;;
-    com.android.wallpaper.livepicker|com.android.bookmarkprovider) CAT=SAFE; DESC="Unused phone leftover" ;;
-    com.sony.dtv.sonyselect) CAT=SAFE; DESC="Sony Select (app promotions)" ;;
+      CAT=SAFE; DESC="App de celular (quase nunca usado na TV)" ;;
+    com.android.egg) CAT=SAFE; DESC="Brincadeira escondida da versão do Android" ;;
+    com.android.wallpaper.livepicker|com.android.bookmarkprovider) CAT=SAFE; DESC="Resto de celular, sem uso" ;;
+    com.sony.dtv.sonyselect) CAT=SAFE; DESC="Sony Select (propaganda de apps)" ;;
 
     # ---- user-facing apps (you choose)
     com.google.android.youtube.tv) CAT=APP; DESC="YouTube" ;;
@@ -310,7 +310,7 @@ classify() {
     com.google.android.youtube.tvkids) CAT=APP; DESC="YouTube Kids" ;;
     com.google.android.youtube.tvunplugged) CAT=APP; DESC="YouTube TV" ;;
     com.google.android.videos) CAT=APP; DESC="Google TV / Play Movies & TV" ;;
-    com.google.android.music) CAT=APP; DESC="Google Play Music (discontinued)" ;;
+    com.google.android.music) CAT=APP; DESC="Google Play Música (descontinuado)" ;;
     com.google.android.play.games) CAT=APP; DESC="Google Play Games" ;;
     com.google.android.apps.photos*) CAT=APP; DESC="Google Photos" ;;
     com.netflix.ninja) CAT=APP; DESC="Netflix" ;;
@@ -322,68 +322,68 @@ classify() {
     com.apple.atve.androidtv.appletv) CAT=APP; DESC="Apple TV" ;;
     org.xbmc.kodi) CAT=APP; DESC="Kodi" ;;
     com.globo.globotv|com.globo.globoplay*) CAT=APP; DESC="Globoplay" ;;
-    me.efesser.flauncher) CAT=APP; DESC="FLauncher (ad-free home screen)" ;;
+    me.efesser.flauncher) CAT=APP; DESC="FLauncher (tela inicial sem anúncios)" ;;
   esac
   [ -n "$CAT" ] && return
 
   # Generic patterns for core parts (checked after the exact names above).
   case "$p" in
-    *.ime|*inputmethod*|*keyboard*) CAT=REQ; DESC="On-screen keyboard" ;;
-    *tvsettings*|*.settings) CAT=REQ; DESC="Settings component" ;;
-    *setupwizard*|*setupwraith*) CAT=REQ; DESC="Setup wizard (runs after resets and updates)" ;;
-    *permissioncontroller*) CAT=REQ; DESC="App permission prompts" ;;
-    *webview*) CAT=REQ; DESC="Web view engine (many apps use it to show pages)" ;;
-    *networkstack*|*wifi*|*connectivity*|*tethering*) CAT=REQ; DESC="Networking / Wi-Fi" ;;
-    *overlay*|*frameworkpackagestubs*) CAT=REQ; DESC="System resource overlay" ;;
-    *launcher*) CAT=REQ; DESC="Home screen (launcher)" ;;
-    *tvinput*|*tvplayer*|*tvcenter*|*hdmi*|*cec*) CAT=REQ; DESC="TV inputs / HDMI / tuner" ;;
+    *.ime|*inputmethod*|*keyboard*) CAT=REQ; DESC="Teclado na tela" ;;
+    *tvsettings*|*.settings) CAT=REQ; DESC="Parte das configurações" ;;
+    *setupwizard*|*setupwraith*) CAT=REQ; DESC="Assistente de configuração (roda após reset e atualizações)" ;;
+    *permissioncontroller*) CAT=REQ; DESC="Pedidos de permissão dos apps" ;;
+    *webview*) CAT=REQ; DESC="Motor web (muitos apps usam para mostrar páginas)" ;;
+    *networkstack*|*wifi*|*connectivity*|*tethering*) CAT=REQ; DESC="Rede / Wi-Fi" ;;
+    *overlay*|*frameworkpackagestubs*) CAT=REQ; DESC="Recursos visuais do sistema" ;;
+    *launcher*) CAT=REQ; DESC="Tela inicial (launcher)" ;;
+    *tvinput*|*tvplayer*|*tvcenter*|*hdmi*|*cec*) CAT=REQ; DESC="Entradas da TV / HDMI / sintonizador" ;;
   esac
   [ -n "$CAT" ] && return
   [ "$sys" = 1 ] && case "$p" in
-    *media*|*codec*|*audio*) CAT=REQ; DESC="Media playback / codecs"; return ;;
+    *media*|*codec*|*audio*) CAT=REQ; DESC="Reprodução de mídia / codecs"; return ;;
   esac
 
   # Guesses from the name: shown so you can review them.
   case "$p" in
     *advert*|*.ads.*|*.ads|*adservice*|*promo*|*analytics*|*tracking*|*telemetry*|*survey*|*recommend*)
-      CAT=SAFE; DESC="Name suggests ads/analytics/recommendations (guess, review it)"; return ;;
+      CAT=SAFE; DESC="Nome sugere anúncios/rastreamento/recomendações (palpite, confira)"; return ;;
   esac
 
   if [ "$sys" = 1 ]; then
-    CAT=REQ; DESC="Preinstalled system/vendor component (unknown, kept to be safe)"
+    CAT=REQ; DESC="Componente do sistema ou do fabricante (desconhecido, mantido por segurança)"
   else
-    CAT=APP; DESC="App you or the TV maker installed"
+    CAT=APP; DESC="App instalado por você ou pelo fabricante"
   fi
 }
 
 audit() {
-  step "3. Audit (nothing is changed here)"
-  if ask_yn "Reboot the TV first so the baseline memory reading is fair?" y; then
+  step "3. Análise (nada é alterado aqui)"
+  if ask_yn "Reiniciar a TV antes, para a medição de memória ser justa?" y; then
     reboot_and_wait
   fi
   snapshot_mem BEFORE
-  info "Baseline: MemAvailable $((BEFORE_AVAIL/1024)) MB, MemFree $((BEFORE_FREE/1024)) MB, total $((BEFORE_TOTAL/1024)) MB"
+  info "Antes: MemAvailable $((BEFORE_AVAIL/1024)) MB, MemFree $((BEFORE_FREE/1024)) MB, total $((BEFORE_TOTAL/1024)) MB"
 
   tv pm list packages -s | sed 's/^package://' | sort > "$TMP/sys"
   tv pm list packages -3 | sed 's/^package://' | sort > "$TMP/third"
   tv pm list packages -d | sed 's/^package://' | sort > "$TMP/disabled"
-  info "$(wc -l < "$TMP/sys" | tr -d ' ') system packages, $(wc -l < "$TMP/third" | tr -d ' ') installed apps, $(wc -l < "$TMP/disabled" | tr -d ' ') already disabled"
+  info "$(wc -l < "$TMP/sys" | tr -d ' ') pacotes do sistema, $(wc -l < "$TMP/third" | tr -d ' ') apps instalados, $(wc -l < "$TMP/disabled" | tr -d ' ') já desativados"
 
   : > "$TMP/table"
   local p sys
   for p in $(cat "$TMP/sys" "$TMP/third"); do
     sys=0; grep -qx "$p" "$TMP/sys" && sys=1
     classify "$p" "$sys"
-    grep -qx "$p" "$TMP/disabled" && DESC="$DESC [already disabled]"
+    grep -qx "$p" "$TMP/disabled" && DESC="$DESC [já desativado]"
     printf '%s\t%s\t%s\n' "$CAT" "$p" "$DESC" >> "$TMP/table"
   done
 
   # Ask which user-facing apps are actually used.
   awk -F'\t' '$1=="APP"' "$TMP/table" > "$TMP/apps"
   if [ -s "$TMP/apps" ]; then
-    bold "  Which of these apps do you actually use?"
+    bold "  Quais destes apps você realmente usa?"
     awk -F'\t' '{printf "    %2d) %-45s %s\n", NR, $2, $3}' "$TMP/apps"
-    printf '  Type the numbers you use, separated by spaces (Enter = keep all): '
+    printf '  Digite os números dos que você usa, separados por espaço (Enter = manter todos): '
     local used; read -r used <&7
     local n=0 cat2 pkg desc
     : > "$TMP/apps2"
@@ -392,21 +392,21 @@ audit() {
       if [ -z "$used" ] || printf ' %s ' "$used" | grep -q " $n "; then
         printf 'MINE\t%s\t%s\n' "$pkg" "$desc" >> "$TMP/apps2"
       else
-        printf 'SAFE\t%s\t%s (you said you do not use it)\n' "$pkg" "$desc" >> "$TMP/apps2"
+        printf 'SAFE\t%s\t%s (você disse que não usa)\n' "$pkg" "$desc" >> "$TMP/apps2"
       fi
     done < "$TMP/apps"
     awk -F'\t' '$1!="APP"' "$TMP/table" > "$TMP/t2"; cat "$TMP/apps2" >> "$TMP/t2"; mv "$TMP/t2" "$TMP/table"
   fi
 
   {
-    printf 'Android TV audit %s (%s)\n\n' "$STAMP" "$TARGET"
-    printf '%-16s %-55s %s\n' "CATEGORY" "PACKAGE" "WHAT IT IS"
+    printf 'Análise da Android TV %s (%s)\n\n' "$STAMP" "$TARGET"
+    printf '%-16s %-55s %s\n' "CATEGORIA" "PACOTE" "O QUE É"
     printf '%-16s %-55s %s\n' "--------" "-------" "----------"
     local c label
     for c in REQ MINE SAFE OPT; do
       case $c in
-        REQ) label="REQUIRED" ;; MINE) label="MINE" ;;
-        SAFE) label="SAFE TO DISABLE" ;; OPT) label="ASKED SEPARATELY" ;;
+        REQ) label="NECESSÁRIO" ;; MINE) label="MEU" ;;
+        SAFE) label="PODE DESATIVAR" ;; OPT) label="PERGUNTA À PARTE" ;;
       esac
       awk -F'\t' -v c="$c" -v l="$label" '$1==c{printf "%-16s %-55s %s\n", l, $2, $3}' "$TMP/table" | sort -k2
     done
@@ -414,7 +414,7 @@ audit() {
   echo
   cat "$AUDIT"
   echo
-  info "Saved this table to $AUDIT"
+  info "Tabela salva em $AUDIT"
 }
 
 # ---------------------------------------------------------------- 4. ask
@@ -429,12 +429,12 @@ stock_launcher() {
 }
 
 choose() {
-  step "4. Your choices"
+  step "4. Suas escolhas"
   awk -F'\t' '$1=="SAFE" && $3 !~ /already disabled/' "$TMP/table" > "$TMP/safe"
   if [ -s "$TMP/safe" ]; then
-    bold "  These would be disabled (not uninstalled):"
+    bold "  Estes seriam desativados (não desinstalados):"
     awk -F'\t' '{printf "    %2d) %-45s %s\n", NR, $2, $3}' "$TMP/safe"
-    printf '  Numbers to KEEP (remove from the list), separated by spaces. Enter = approve all: '
+    printf '  Números para MANTER (tirar da lista), separados por espaço. Enter = aprovar todos: '
     local keep; read -r keep <&7
     : > "$TMP/todisable"
     local n=0 c p d
@@ -442,30 +442,30 @@ choose() {
       n=$((n+1))
       printf ' %s ' "$keep" | grep -q " $n " || echo "$p" >> "$TMP/todisable"
     done < "$TMP/safe"
-    info "$(grep -c . "$TMP/todisable") apps approved for disabling."
+    info "$(grep -c . "$TMP/todisable") apps aprovados para desativar."
   else
     : > "$TMP/todisable"
-    info "Nothing in SAFE TO DISABLE."
+    info "Nada na lista PODE DESATIVAR."
   fi
 
   echo
   OPT_VOICE=0; OPT_CAST=0; OPT_SAVER=0; OPT_LIVETV=0; OPT_ANIM=0; OPT_LAUNCHER=0; OPT_HIDE_STOCK=0
-  ask_yn "Turn off voice search / Assistant? (the remote's mic button and the search box stop working)" n && OPT_VOICE=1
-  ask_yn "Turn off Chromecast built-in? (you can no longer cast from your phone)" n && OPT_CAST=1
-  ask_yn "Turn off the screensaver / Ambient mode?" y && OPT_SAVER=1
-  ask_yn "Stop the TV from booting into Live TV?" y && OPT_LIVETV=1
-  ask_yn "Set animation scales to 0 for snappier menus?" y && OPT_ANIM=1
-  if ask_yn "Install a minimal ad-free home screen (FLauncher: clock, rows of your apps, settings)?" y; then
+  ask_yn "Desligar a busca por voz / Assistente? (o botão do microfone e a busca param de funcionar)" n && OPT_VOICE=1
+  ask_yn "Desligar o Chromecast integrado? (não dá mais para transmitir do celular)" n && OPT_CAST=1
+  ask_yn "Desligar o protetor de tela / Modo ambiente?" y && OPT_SAVER=1
+  ask_yn "Impedir que a TV ligue direto na TV ao vivo?" y && OPT_LIVETV=1
+  ask_yn "Zerar as animações para os menus ficarem mais rápidos?" y && OPT_ANIM=1
+  if ask_yn "Instalar uma tela inicial simples e sem anúncios (FLauncher: relógio, fileiras com seus apps, configurações)?" y; then
     OPT_LAUNCHER=1
     if [ -n "$(stock_launcher)" ]; then
-      info "On some TVs (mostly Google TV) the Home button still opens the stock home screen."
-      ask_yn "Also disable the stock home screen so Home always opens FLauncher? (undoable)" n && OPT_HIDE_STOCK=1
+      info "Em algumas TVs (principalmente Google TV) o botão Home ainda abre a tela inicial original."
+      ask_yn "Desativar também a tela inicial original para o Home sempre abrir o FLauncher? (dá para desfazer)" n && OPT_HIDE_STOCK=1
     fi
   fi
 
   echo
-  bold "  Last check: apply these changes now?"
-  ask_yn "Apply?" n || { info "Nothing changed. Audit saved at $AUDIT"; exit 0; }
+  bold "  Última confirmação: aplicar estas mudanças agora?"
+  ask_yn "Aplicar?" n || { info "Nada foi alterado. Análise salva em $AUDIT"; exit 0; }
 }
 
 # ---------------------------------------------------------------- 5. apply
@@ -473,7 +473,7 @@ choose() {
 disable_pkg() {
   local p="$1"
   tv pm list packages "$p" | grep -qx "package:$p" || return 0
-  change "disable $p" "pm disable-user --user 0 $p" "pm enable --user 0 $p"
+  change "desativar $p" "pm disable-user --user 0 $p" "pm enable --user 0 $p"
 }
 
 set_setting() { # namespace key value
@@ -481,26 +481,26 @@ set_setting() { # namespace key value
   old="$(tv settings get "$ns" "$key")"
   if [ "$old" = "null" ] || [ -z "$old" ]; then undo="settings delete $ns $key"
   else undo="settings put $ns $key '$old'"; fi
-  change "setting $ns $key = $val (was $old)" "settings put $ns $key '$val'" "$undo"
+  change "configuração $ns $key = $val (era $old)" "settings put $ns $key '$val'" "$undo"
 }
 
 set_home() { # component
   local new="$1" old; old="$(current_home)"
   case "$old" in */*) ;; *) old="" ;; esac
   if [ -n "$old" ]; then
-    change "home screen -> $new (was $old)" "cmd package set-home-activity --user 0 $new" "cmd package set-home-activity --user 0 $old"
+    change "tela inicial -> $new (era $old)" "cmd package set-home-activity --user 0 $new" "cmd package set-home-activity --user 0 $old"
   else
-    change "home screen -> $new" "cmd package set-home-activity --user 0 $new" "true"
+    change "tela inicial -> $new" "cmd package set-home-activity --user 0 $new" "true"
   fi
 }
 
 apply() {
-  step "5. Applying"
+  step "5. Aplicando"
   mkdir -p "$WORKDIR"
   {
-    echo "# tv-tune change log"
+    echo "# Registro de mudanças do tv-tune"
     echo "# TV: $TARGET  ($(tv getprop ro.product.manufacturer) $(tv getprop ro.product.model))"
-    echo "# Started: $(date)"
+    echo "# Início: $(date)"
     echo
   } > "$LOG"
 
@@ -531,7 +531,7 @@ apply() {
   elif [ $OPT_LIVETV = 1 ]; then
     fix_live_tv_boot
   fi
-  [ $OPT_LIVETV = 1 ] && [ $OPT_LAUNCHER = 1 ] && info "Live TV boot: the home screen is now FLauncher, so the TV boots there."
+  [ $OPT_LIVETV = 1 ] && [ $OPT_LAUNCHER = 1 ] && info "TV ao vivo: a tela inicial agora é o FLauncher, então a TV liga nele."
   [ $OPT_LIVETV = 1 ] && livetv_vendor_hint
 
   write_undo
@@ -541,41 +541,41 @@ fix_live_tv_boot() {
   local home stock; home="$(current_home)"; stock="$(stock_launcher)"
   case "$home" in
     *launcherx*|*tvlauncher*|*leanbacklauncher*)
-      info "Home is already the normal launcher ($home)." ;;
+      info "A tela inicial já é o launcher normal ($home)." ;;
     */*)
       if [ -n "$stock" ]; then set_home "$stock"
-      else warn "Could not find the stock launcher to make it the home screen."; fi ;;
+      else warn "Não encontrei o launcher original para usar como tela inicial."; fi ;;
     *)
       [ -n "$stock" ] && set_home "$stock" ;;
   esac
 }
 
 livetv_vendor_hint() {
-  info "If the TV still opens Live TV at power-on, it is a TV-maker setting adb cannot change. Look for:"
-  info "  Sony: Settings > System > Power > 'Auto start' / 'Power on behavior' > Android TV home"
-  info "  Philips / TCL / Hisense: Settings > Inputs or Power > 'Boot to source' / 'Startup input' > Home"
+  info "Se a TV ainda abrir na TV ao vivo ao ligar, é uma opção do fabricante que o adb não muda. Procure:"
+  info "  Sony: Configurações > Sistema > Energia > 'Comportamento ao ligar' > Tela inicial do Android TV"
+  info "  Philips / TCL / Hisense: Configurações > Entradas ou Energia > 'Entrada ao ligar' > Tela inicial"
 }
 
 install_flauncher() {
   if tv pm list packages "$FL_PKG" | grep -qx "package:$FL_PKG"; then
-    info "FLauncher already installed."
-    tv pm list packages -d | grep -qx "package:$FL_PKG" && change "enable FLauncher" "pm enable --user 0 $FL_PKG" "pm disable-user --user 0 $FL_PKG"
+    info "FLauncher já está instalado."
+    tv pm list packages -d | grep -qx "package:$FL_PKG" && change "ativar FLauncher" "pm enable --user 0 $FL_PKG" "pm disable-user --user 0 $FL_PKG"
   else
     local apk="$WORKDIR/flauncher-0.18.0.apk"
     if [ ! -f "$apk" ] || [ "$(sha256_of "$apk")" != "$FL_SHA256" ]; then
-      info "Downloading FLauncher..."
-      curl -fsSL -o "$apk" "$FL_URL" || { warn "Download failed; skipping launcher."; return; }
+      info "Baixando o FLauncher..."
+      curl -fsSL -o "$apk" "$FL_URL" || { warn "O download falhou; pulando a tela inicial."; return; }
     fi
-    [ "$(sha256_of "$apk")" = "$FL_SHA256" ] || { warn "Download checksum mismatch; not installing."; rm -f "$apk"; return; }
-    info "Installing FLauncher..."
+    [ "$(sha256_of "$apk")" = "$FL_SHA256" ] || { warn "O arquivo baixado não confere; não vou instalar."; rm -f "$apk"; return; }
+    info "Instalando o FLauncher..."
     local out; out="$("$ADB" -s "$TARGET" install "$apk" 2>&1 | tr -d '\r')"
     if printf '%s' "$out" | grep -q Success; then
       log "OK    install FLauncher ($FL_PKG) from $FL_URL sha256 $FL_SHA256"
       log "      undo: pm disable-user --user 0 $FL_PKG   (disabled, not uninstalled)"
       add_undo "pm disable-user --user 0 $FL_PKG"
-      info "done: installed FLauncher"
+      info "feito: FLauncher instalado"
     else
-      log "FAIL  install FLauncher: $out"; warn "Install failed: $out"; return
+      log "FAIL  install FLauncher: $out"; warn "A instalação falhou: $out"; return
     fi
   fi
   local comp; comp="$(tv cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME | grep "^$FL_PKG/" | head -1)"
@@ -583,7 +583,7 @@ install_flauncher() {
   if [ -n "$comp" ]; then
     set_home "$comp"
   else
-    warn "Could not find FLauncher's home activity; press Home on the TV and pick FLauncher."
+    warn "Não consegui definir o FLauncher como tela inicial; aperte Home na TV e escolha FLauncher."
   fi
   if [ $OPT_HIDE_STOCK = 1 ]; then
     local s; s="$(stock_launcher)"; s="${s%%/*}"
@@ -597,22 +597,22 @@ write_undo() {
   local body; body="$(printf '%s\n' "$UNDO_CMDS" | grep -v '^$' | paste -sd ';' - | sed 's/;/; /g')"
   {
     echo "#!/usr/bin/env bash"
-    echo "# Undo every change tv-tune made on $STAMP to $TARGET."
+    echo "# Desfaz todas as mudanças que o tv-tune fez em $STAMP na TV $TARGET."
     echo "adb connect $TARGET"
     echo "adb -s $TARGET wait-for-device"
     printf '%s\n' "$UNDO_CMDS" | grep -v '^$' | while read -r c; do
       printf 'adb -s %s shell "%s"\n' "$TARGET" "$c"
     done
-    echo "echo 'Undo finished. Rebooting the TV.'"
+    echo "echo 'Desfeito. Reiniciando a TV.'"
     echo "adb -s $TARGET reboot"
   } > "$UNDO"
   chmod +x "$UNDO"
   UNDO_ONELINER="adb connect $TARGET && adb -s $TARGET shell \"$body\" && adb -s $TARGET reboot"
   {
     echo
-    echo "# ---- To undo everything, run this ONE command:"
+    echo "# ---- Para desfazer tudo, rode este ÚNICO comando:"
     echo "#   bash \"$UNDO\""
-    echo "# or, without the script:"
+    echo "# ou, sem o script:"
     echo "#   $UNDO_ONELINER"
   } >> "$LOG"
 }
@@ -620,7 +620,7 @@ write_undo() {
 # ---------------------------------------------------------------- 6. results
 
 reboot_and_wait() {
-  info "Rebooting the TV..."
+  info "Reiniciando a TV..."
   "$ADB" -s "$TARGET" reboot >/dev/null 2>&1
   sleep "$BOOTWAIT"
   local t=0
@@ -632,45 +632,45 @@ reboot_and_wait() {
     fi
     sleep 5; t=$((t+5))
   done
-  [ $t -ge 300 ] && die "The TV did not come back within 5 minutes. Run 'adb connect $TARGET' and check it."
-  info "Back up. Waiting $SETTLE seconds for background apps to settle..."
+  [ $t -ge 300 ] && die "A TV não voltou em 5 minutos. Rode 'adb connect $TARGET' e confira."
+  info "Ligou. Esperando $SETTLE segundos para os apps em segundo plano estabilizarem..."
   sleep "$SETTLE"
 }
 
 results() {
-  step "6. Results"
+  step "6. Resultado"
   reboot_and_wait
   snapshot_mem AFTER
   local fb=$((BEFORE_FREE/1024)) fa=$((AFTER_FREE/1024)) ab=$((BEFORE_AVAIL/1024)) aa=$((AFTER_AVAIL/1024))
   {
     echo
-    echo "# ---- Memory before vs after"
-    printf '#   %-14s %8s %8s %8s\n' "" "Before" "After" "Change"
+    echo "# ---- Memória antes x depois"
+    printf '#   %-14s %8s %8s %8s\n' "" "Antes" "Depois" "Diferença"
     printf '#   %-14s %6s MB %6s MB %+6d MB\n' "MemAvailable" "$ab" "$aa" $((aa-ab))
     printf '#   %-14s %6s MB %6s MB %+6d MB\n' "MemFree" "$fb" "$fa" $((fa-fb))
   } | tee -a "$LOG" | sed 's/^# \{0,1\}//'
   echo
-  info "MemAvailable is the number that matters: memory apps can use right now."
+  info "MemAvailable é o número que importa: memória que os apps podem usar agora."
   echo
-  bold "  Change log: $LOG"
-  bold "  To undo everything, run:"
+  bold "  Registro de mudanças: $LOG"
+  bold "  Para desfazer tudo, rode:"
   echo
   echo "    bash \"$UNDO\""
   echo
   if [ "${FL_INSTALLED:-0}" = 1 ]; then
-    bold "  Finish your new home screen (one minute, with the remote):"
-    info "  1. Long-press any app > 'Move to' / categories to make a row called 'My apps' with your apps."
-    info "  2. Add a second row 'Inputs & settings' with your TV's Inputs app and Settings."
-    info "  3. FLauncher settings (gear, top right) > turn on the clock, pick a plain wallpaper."
+    bold "  Termine sua nova tela inicial (um minuto, com o controle):"
+    info "  1. Segure OK num app > categorias: crie uma fileira 'Meus apps' com seus apps."
+    info "  2. Crie uma segunda fileira 'Entradas e configurações' com o app de Entradas da TV e Configurações."
+    info "  3. Configurações do FLauncher (engrenagem, canto superior direito) > ligue o relógio e escolha um fundo simples."
   fi
 }
 
 # ---------------------------------------------------------------- main
 
 main() {
-  exec 7<"$TTY" || die "Cannot read answers from $TTY (run this from a terminal)."
-  bold "Android TV speed-up and clean-up"
-  info "Nothing is changed until you approve it at step 4."
+  exec 7<"$TTY" || die "Não consigo ler respostas de $TTY (rode isto num terminal)."
+  bold "Acelerar e limpar a Android TV"
+  info "Nada é alterado até você aprovar na etapa 4."
   setup_adb
   if [ -n "$TARGET" ]; then
     detect_os; case "$TARGET" in *:*) ;; *) TARGET="$TARGET:$PORT" ;; esac
