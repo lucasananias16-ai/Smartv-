@@ -57,12 +57,15 @@ O programa vai mostrando cada etapa. Em perguntas **[S/n]**, aperte Enter para "
 7. **Perguntas extras:**
    - Busca por voz: desligar faz o botão do microfone e a busca pararem.
    - Chromecast: desligar impede transmitir do celular.
-   - Protetor de tela, ligar direto na TV ao vivo, animações, tela inicial nova sem anúncios.
-8. **"Aplicar?"**: só aqui as mudanças são feitas. Responda **s** para aplicar.
+   - Protetor de tela, ligar direto na TV ao vivo, animações.
+   - Tela inicial: **Enter mantém a tela original do Google TV** (só responda "s" se quiser trocar pelo FLauncher).
+8. **"Aplicar?"**: só aqui as mudanças são feitas. **Digite s e aperte Enter.** Só Enter não vale: o programa pergunta de novo.
+
+Depois de aplicar, o programa **confere na TV** quais apps ficaram mesmo desativados e mostra quantos (ex.: "6 de 7 apps estão desativados"). Alguns apps de sistema não deixam ser desativados; isso é normal.
 
 No final, a TV reinicia e aparece a tabela **memória antes x depois**.
 
-### Passo 6: arrumar a tela inicial nova (se escolheu instalar)
+### Passo 6 (opcional): arrumar a tela inicial nova, se escolheu o FLauncher
 
 Com o controle, no FLauncher:
 1. Segure OK num app > categorias: crie uma fileira **"Meus apps"** com seus apps.
@@ -94,6 +97,8 @@ Os registros ficam na pasta `tv-tune`, dentro da sua pasta de usuário:
 | A TV ainda liga na TV ao vivo | É uma opção do fabricante. Sony: Configurações > Sistema > Energia > Comportamento ao ligar. Philips/TCL/Hisense: Configurações > Entradas ou Energia > Entrada ao ligar. |
 | O botão Home abre a tela antiga | Rode de novo e responda "s" para desativar a tela inicial original (dá para desfazer). |
 | No Windows: "adb não encontrado" depois de instalar | Feche e abra o Git Bash e rode de novo. |
+| "Não consegui ler a memória da TV" | Mande um print da tela. |
+| Algum app "continua ativo" | A TV não deixa desativar esse app. O resto foi aplicado. |
 
 ## Opções avançadas
 

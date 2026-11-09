@@ -42,13 +42,20 @@ warn()  { printf '\033[33m  ! %s\033[0m\n' "$*"; }
 die()   { printf '\033[31m  x %s\033[0m\n' "$*"; exit 1; }
 step()  { printf '\n\033[1;36m== %s ==\033[0m\n' "$*"; }
 
-ask_yn() { # ask_yn "question" default(y|n)
-  local q="$1" def="${2:-n}" ans hint="[s/N]"
+ask_yn() { # ask_yn "pergunta" padrão(y|n|vazio = obrigatório responder)
+  local q="$1" def="${2:-}" ans hint="[s/n]"
   [ "$def" = y ] && hint="[S/n]"
-  printf '  %s %s ' "$q" "$hint"
-  read -r ans <&7 || ans=""
-  [ -z "$ans" ] && ans="$def"
-  case "$ans" in [SsYy]*) return 0 ;; *) return 1 ;; esac
+  [ "$def" = n ] && hint="[s/N]"
+  while :; do
+    printf '  %s %s ' "$q" "$hint"
+    read -r ans <&7 || ans=""
+    [ -z "$ans" ] && ans="$def"
+    case "$ans" in
+      [SsYy]*) return 0 ;;
+      [Nn]*) return 1 ;;
+      *) printf '  Digite s (sim) ou n (não).\n' ;;
+    esac
+  done
 }
 
 tv() { "$ADB" -s "$TARGET" shell "$@" 2>&1 | tr -d '\r'; }
@@ -90,7 +97,9 @@ detect_os() {
   case "$(uname -s)" in
     Darwin) OS=mac ;;
     Linux)  OS=linux ;;
-    MINGW*|MSYS*|CYGWIN*) OS=windows ;;
+    MINGW*|MSYS*|CYGWIN*) OS=windows
+      # Sem isto, o Git Bash troca "/proc/meminfo" por "C:/Program Files/Git/proc/meminfo".
+      export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' ;;
     *) OS=unknown ;;
   esac
 }
@@ -265,6 +274,14 @@ connect_tv() {
 
 mem_kb() { tv cat /proc/meminfo | awk -v k="$1:" '$1==k{print $2}'; }
 
+check_mem() { # prefixo
+  local v; eval "v=\${${1}_AVAIL:-}"
+  if [ -z "$v" ] || [ "$v" = 0 ]; then
+    warn "Não consegui ler a memória da TV. Resposta: $(tv cat /proc/meminfo | head -2)"
+    return 1
+  fi
+}
+
 snapshot_mem() { # prefix
   eval "${1}_TOTAL=\$(mem_kb MemTotal)"
   eval "${1}_FREE=\$(mem_kb MemFree)"
@@ -382,6 +399,7 @@ audit() {
     reboot_and_wait
   fi
   snapshot_mem BEFORE
+  check_mem BEFORE || die "Sem leitura de memória não dá para comparar. Me mande um print desta tela."
   info "Antes: MemAvailable $((BEFORE_AVAIL/1024)) MB, MemFree $((BEFORE_FREE/1024)) MB, total $((BEFORE_TOTAL/1024)) MB"
 
   tv pm list packages -s | sed 's/^package://' | sort > "$TMP/sys"
@@ -475,7 +493,7 @@ choose() {
   ask_yn "Desligar o protetor de tela / Modo ambiente?" y && OPT_SAVER=1
   ask_yn "Impedir que a TV ligue direto na TV ao vivo?" y && OPT_LIVETV=1
   ask_yn "Zerar as animações para os menus ficarem mais rápidos?" y && OPT_ANIM=1
-  if ask_yn "Instalar uma tela inicial simples e sem anúncios (FLauncher: relógio, fileiras com seus apps, configurações)?" y; then
+  if ask_yn "Trocar a tela inicial original por uma simples e sem anúncios (FLauncher)? Enter = manter a original" n; then
     OPT_LAUNCHER=1
     if [ -n "$(stock_launcher)" ]; then
       info "Em algumas TVs (principalmente Google TV) o botão Home ainda abre a tela inicial original."
@@ -485,7 +503,7 @@ choose() {
 
   echo
   bold "  Última confirmação: aplicar estas mudanças agora?"
-  ask_yn "Aplicar?" n || { info "Nada foi alterado. Análise salva em $AUDIT"; exit 0; }
+  ask_yn "Aplicar? (digite s e Enter)" || { info "Nada foi alterado. Análise salva em $AUDIT"; exit 0; }
 }
 
 # ---------------------------------------------------------------- 5. apply
@@ -493,6 +511,7 @@ choose() {
 disable_pkg() {
   local p="$1"
   tv pm list packages "$p" | grep -qx "package:$p" || return 0
+  echo "$p" >> "$TMP/wanted"
   change "desativar $p" "pm disable-user --user 0 $p" "pm enable --user 0 $p"
 }
 
@@ -554,7 +573,25 @@ apply() {
   [ $OPT_LIVETV = 1 ] && [ $OPT_LAUNCHER = 1 ] && info "TV ao vivo: a tela inicial agora é o FLauncher, então a TV liga nele."
   [ $OPT_LIVETV = 1 ] && livetv_vendor_hint
 
+  verify_disabled
   write_undo
+}
+
+# Confere na TV se cada app pedido está mesmo desativado.
+verify_disabled() {
+  tv pm list packages -d | sed 's/^package://' | sort > "$TMP/disabled_now"
+  local want ok=0 bad=0 p
+  want="$(sort -u "$TMP/wanted" 2>/dev/null)"
+  [ -z "$want" ] && return
+  echo
+  bold "  Conferindo na TV:"
+  for p in $want; do
+    if grep -qx "$p" "$TMP/disabled_now"; then ok=$((ok+1))
+    else bad=$((bad+1)); warn "continua ativo: $p"; log "CHECK still enabled: $p"; fi
+  done
+  info "$ok de $((ok+bad)) apps estão desativados."
+  log "CHECK $ok of $((ok+bad)) packages disabled"
+  [ $bad -gt 0 ] && info "Alguns apps de sistema não deixam ser desativados nesta TV. Isso é normal; o resto foi aplicado."
 }
 
 fix_live_tv_boot() {
@@ -661,6 +698,7 @@ results() {
   step "6. Resultado"
   reboot_and_wait
   snapshot_mem AFTER
+  check_mem AFTER || return
   local fb=$((BEFORE_FREE/1024)) fa=$((AFTER_FREE/1024)) ab=$((BEFORE_AVAIL/1024)) aa=$((AFTER_AVAIL/1024))
   {
     echo
