@@ -226,19 +226,39 @@ discover() {
 
 connect_tv() {
   bold "  Conectando em $TARGET"
-  "$ADB" connect "$TARGET" >/dev/null 2>&1
+  # Reinicia o servidor do adb para começar limpo.
+  "$ADB" kill-server >/dev/null 2>&1
+  "$ADB" start-server >/dev/null 2>&1
+  info "adb: $("$ADB" connect "$TARGET" 2>&1 | tr -d '\r')"
   bold "  >>> Olhe para a TV agora e aperte \"Permitir\" (marque \"Sempre permitir\" para não perguntar de novo). <<<"
-  local t=0 st
-  while [ $t -lt 90 ]; do
+  local t=0 st last=""
+  while [ $t -lt 120 ]; do
     st="$("$ADB" -s "$TARGET" get-state 2>&1 | tr -d '\r')"
+    if [ "$st" != "$last" ]; then
+      case "$st" in
+        device) ;;
+        *unauthorized*) info "Estado: aguardando você apertar \"Permitir\" na TV..." ;;
+        *offline*) info "Estado: TV respondeu, mas está offline. Tentando de novo..." ;;
+        *) info "Estado: $st" ;;
+      esac
+      last="$st"
+    fi
     case "$st" in
       device) info "Conectado: $(tv getprop ro.product.manufacturer) $(tv getprop ro.product.model), Android $(tv getprop ro.build.version.release)"; return ;;
       *unauthorized*) ;;
+      *offline*) "$ADB" disconnect "$TARGET" >/dev/null 2>&1; "$ADB" connect "$TARGET" >/dev/null 2>&1 ;;
       *) "$ADB" connect "$TARGET" >/dev/null 2>&1 ;;
     esac
     sleep 2; t=$((t+2))
   done
-  die "A TV não autorizou em 90 segundos. Confira se a depuração USB está ligada e rode de novo."
+  warn "A TV não autorizou em 2 minutos. Último estado: $st"
+  info "Tente, nesta ordem:"
+  info "  1. Na TV, aperte Home e veja se a janela \"Permitir depuração\" está escondida atrás de algum app."
+  info "  2. Na TV: Opções do desenvolvedor > \"Revogar autorizações de depuração USB\"."
+  info "  3. Desligue e ligue de novo a \"Depuração USB\" (e \"Depuração de rede\", se existir)."
+  info "  4. Confira se $TARGET é mesmo a TV (Configurações > Rede > Endereço IP)."
+  info "  Depois rode de novo:  TVTUNE_TARGET=${TARGET%%:*} bash tv-tune.sh"
+  exit 1
 }
 
 # ---------------------------------------------------------------- 3. audit
