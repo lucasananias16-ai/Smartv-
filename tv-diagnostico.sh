@@ -6,7 +6,7 @@
 #
 # Salva tudo em ~/tv-tune/diagnostico-<data>.txt
 
-set -u
+isnum() { case "$1" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' ;; esac
 
 IP="${1:-${TVTUNE_TARGET:-}}"
@@ -36,6 +36,7 @@ st="$("$ADB" -s "$T" get-state 2>&1 | tr -d '\r')"
 
   sec "1. Quando a TV ligou pela última vez (último boot)"
   now="$(tv date +%s)"; up="$(tv cat /proc/uptime | cut -d. -f1)"
+  isnum "$now" || now=""; isnum "$up" || up=""
   if [ -n "$now" ] && [ -n "$up" ]; then
     boot=$((now - up))
     echo "Ligada há $((up/3600))h $((up%3600/60))min"
@@ -48,7 +49,7 @@ st="$("$ADB" -s "$T" get-state 2>&1 | tr -d '\r')"
   if [ -n "${up:-}" ]; then
     for k in mLastSleepTime mLastWakeTime; do
       ms="$(tv dumpsys power | grep -oE "$k=[0-9]+" | head -1 | cut -d= -f2)"
-      if [ -n "$ms" ] && [ "$ms" -gt 0 ]; then
+      if [ -n "${now:-}" ] && isnum "$ms" && [ "$ms" -gt 0 ]; then
         t=$((now - up + ms/1000))
         echo "$k em: $(tv date -d "@$t" '+%d/%m/%Y %H:%M:%S' 2>/dev/null)"
       fi
